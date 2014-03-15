@@ -27,6 +27,7 @@ _f_delim   = ";"  # delimiter for multiple values in a single column
 # options
 _blvl      = 'a'
 _verbose   = false
+_xml       = false
 
 # tracking variables
 _count     = 0
@@ -40,6 +41,7 @@ ARGV.options do |opts|
   opts.on("-o", "--output=val", String)    { |output| _output = output }
   opts.on("-s", "--split=val", String)     { |split| _f_delim = split }
   opts.on("-v", "--verbose")               { |verbose| _verbose = true }
+  opts.on("-x", "--xml")                   { |xml| _xml = true }
   opts.on_tail("-h", "--help")             { puts _banner }
   opts.parse!
 end
@@ -60,7 +62,7 @@ _protect = _conf["protect"]
 _replace = _conf["replace"]
 
 # create marc writer 
-_writer  = MARC::Writer.new _output
+_writer  = _xml ? MARC::XMLWriter.new(_output) : MARC::Writer.new(_output)
 
 CSV.foreach(_input, { col_sep: _c_delim, headers: true }) do |csv|
   begin
