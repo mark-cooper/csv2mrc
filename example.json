@@ -1,0 +1,45 @@
+{
+	"leader": {
+		"0005"      : "n",
+		"0006"      : "m",
+		"0007"      : "a",
+		"0087..10"  : "year",
+		"00835..37" : "eng"
+	},
+	"spec": [
+		{ "authors"     : { "tag": "100", "ind1": "0", "ind2": " ", "sub": "a", "join": false, "prepend": "", "append": "." } },
+		{ "title"       : { "tag": "245", "ind1": "0", "ind2": "0", "sub": "a", "join": false, "prepend": "", "append": "." } },
+		{ "publisher"   : { "tag": "260", "ind1": " ", "ind2": " ", "sub": "b", "join": true, "prepend": "", "append": "," } },
+		{ "year"        : { "tag": "260", "ind1": " ", "ind2": " ", "sub": "c", "join": true, "prepend": "", "append": "." } },
+		{ "publication" : { "tag": "490", "ind1": "0", "ind2": " ", "sub": "a", "join": false, "prepend": "", "append": "." } },
+		{ "abstract"    : { "tag": "520", "ind1": " ", "ind2": " ", "sub": "a", "join": false, "prepend": "", "append": "." } },
+		{ "subjects"    : { "tag": "650", "ind1": "0", "ind2": "4", "sub": "a", "join": false, "prepend": "", "append": "." } },
+		{ "publication" : { "tag": "773", "ind1": "0", "ind2": " ", "sub": "t", "join": true, "prepend": "", "append": "." } },
+		{ "vol"         : { "tag": "773", "ind1": "0", "ind2": " ", "sub": "g", "join": true, "prepend": "Vol. ", "append": ". " } },
+		{ "issue"       : { "tag": "773", "ind1": "0", "ind2": " ", "sub": "g", "join": true, "prepend": "No. ", "append": ". " } },
+		{ "year"        : { "tag": "773", "ind1": "0", "ind2": " ", "sub": "g", "join": true, "prepend": "", "append": "." } },		
+		{ "pages"       : { "tag": "773", "ind1": "0", "ind2": " ", "sub": "g", "join": true, "prepend": " ", "append": "." } },
+		{ "issue"       : { "tag": "773", "ind1": "0", "ind2": " ", "sub": "l", "join": true, "prepend": "", "append": "" } },
+		{ "pages"       : { "tag": "773", "ind1": "0", "ind2": " ", "sub": "q", "join": true, "prepend": "", "append": "" } },
+		{ "vol"         : { "tag": "773", "ind1": "0", "ind2": " ", "sub": "v", "join": true, "prepend": "", "append": "" } },
+		{ "url"         : { "tag": "856", "ind1": "4", "ind2": "2", "sub": "u", "join": false, "prepend": "", "append": "" } }
+	],
+	"f_adds": [
+		{ "tag": "022", "ind1": " ", "ind2": " ", "subfields": [ ["a", "1234-5678"] ] },
+		{ "tag": "040", "ind1": " ", "ind2": " ", "subfields": [ ["c", "test"] ] },
+		{ "tag": "041", "ind1": " ", "ind2": " ", "subfields": [ ["a", "eng"] ] }
+	],
+	"s_adds": [
+		{ "tag": "856", "subfields": [ ["y", "Link to article."] ] }
+	],
+	"protect": {
+		"100": "700",
+		"110": "710",
+		"300": "500"
+	},
+	"replace": {
+		"260": {
+			"b": "Override publisher,"
+		}
+	}
+}
