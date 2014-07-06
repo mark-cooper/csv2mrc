@@ -1,56 +1,100 @@
 require 'csv'
 require 'json'
 require 'marc'
-require 'optparse'
-require 'pp'
 
-# return true only if string is defined and not empty
-def has_content?(string)
-  !string.nil? and !string.empty?
+class Csv2MrcLeaderValueError < RuntimeError ; end
+class Csv2MrcLeaderByteLengthError < RuntimeError ; end
+class Csv2MrcSpecError < RuntimeError ; end
+
+class Csv2Mrc
+
+  attr_reader :leader, :spec
+
+  def initialize(config)
+    @config = JSON.parse( IO.read(config), symbolize_names: false )
+    @leader = @config["leader"]
+    @spec    = @config["spec"]
+  end
+
+  def get_bytes(byte_range)
+    byte_range.split('..').map{ |d| Integer(d) }
+  end
+
+  def process_control_fields(record, row)
+    fixed_field = ' ' * 40 # start with empty fixed field positions
+    leader.each do |where, value|
+      tag, byte = where[0..2], where[3..-1] # first three characters are tag, rest are byte positions
+      value = check_csv_value(row, value) # if value matches a csv header use the csv value
+    
+      if byte_is_range? byte
+        bytes = get_bytes byte # array of two elements, position 1 and 2 (i.e. date1, date2)
+        size = (bytes[1] - bytes[0]) + 1 # length value should be to be consistent
+        raise Csv2MrcLeaderByteLengthError, "CSV value for byte range #{byte} is incorrect length" unless value.size == size
+
+        if leader_tag? tag
+          record.leader[bytes[0]..bytes[1]] = value
+        else
+          fixed_field[ bytes[0]..bytes[1] ] = value
+        end
+      else 
+        if leader_tag? tag
+          record.leader[byte.to_i] = value
+        else
+          fixed_field[byte.to_i] = value
+        end
+      end
+    end
+    record.append( MARC::ControlField.new("008", fixed_field) )
+    record
+  end
+
+  def process_row(row)
+    record = MARC::Record.new
+
+    # values from csv can be injected into 008 so pass it
+    process_control_fields record, row
+    process_variable_fields record, row
+    record
+  end
+
+  def process_variable_fields(record, row)
+    fields_created = {}
+    spec.each do |csv_mapper| # each mapper is a {} with key that should match a row column
+      csv_mapper.each do |column, rules|
+        raise Csv2MrcSpecError, "Invalid spec key #{column} not found in headers" unless row.has_key? column
+        next unless has_content? row[column] # nothing to do if empty
+        # 
+      end
+    end
+    record
+  end
+
+  private
+
+  def byte_is_range?(byte)
+    byte =~ /../
+  end
+
+  def check_csv_value(row, value)
+    if row.has_key? value
+      raise Csv2MrcLeaderValueError, "CSV header #{value} contains no data for leader" unless has_content? row[value]
+      value = row[value].strip
+    end
+    value
+  end
+
+  def leader_tag?(tag)
+    tag == "000"
+  end
+
+  # return true only if string is defined and not empty
+  def has_content?(string)
+    !string.nil? and !string.empty?
+  end
+
 end
 
-$stderr.sync = true
- 
-# messages
-_banner    = "csv2mrc -i input.tsv -c configuration.json -o output.mrc"
-_file_err  = "Input (delimited) and configuration (json) must be existing files"
-
-# files
-_conf      = nil
-_input     = nil
-_output    = nil
-
-# delimiters
-_c_delim   = "\t" # column delimiter
-_f_delim   = ";"  # delimiter for multiple values in a single column
-
-# options
-_blvl      = 'a'
-_verbose   = false
-_xml       = false
-
-# tracking variables
-_count     = 0
-
-# parse arguments
-ARGV.options do |opts|
-  opts.on("-b", "--blvl=val", String)      { |blvl| _blvl = blvl }
-  opts.on("-c", "--conf=val", String)      { |conf| _conf = conf }
-  opts.on("-d", "--delimiter=val", String) { |delimiter| _c_delim = delimiter }
-  opts.on("-i", "--input=val", String)     { |input| _input = input }
-  opts.on("-o", "--output=val", String)    { |output| _output = output }
-  opts.on("-s", "--split=val", String)     { |split| _f_delim = split }
-  opts.on("-v", "--verbose")               { |verbose| _verbose = true }
-  opts.on("-x", "--xml")                   { |xml| _xml = true }
-  opts.on_tail("-h", "--help")             { puts _banner }
-  opts.parse!
-end
-
-# exit and print banner unless all args are supplied
-raise _banner unless _conf and _input and _output
-raise "#{_banner}\n#{_file_err}" unless File.exists? _input and File.exists? _conf
-
-# __END__ # 4 TESTING
+__END__
 
 # gather config elements
 _conf    = JSON.parse( IO.read( _conf ) )
