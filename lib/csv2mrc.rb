@@ -8,7 +8,7 @@ class Csv2MrcSpecError < RuntimeError ; end
 
 class Csv2Mrc
 
-  attr_reader :leader, :options, :protect, :spec
+  attr_reader :field_adds, :leader, :options, :protect, :replace, :spec, :subfield_adds
 
   def initialize(config, options = {})
     @config = JSON.parse( IO.read(config), symbolize_names: false )
@@ -20,6 +20,9 @@ class Csv2Mrc
     @leader  = @config["leader"]
     @spec     = @config["spec"]
     @protect = @config["protect"]
+    @field_adds = @config["f_adds"]
+    @subfield_adds = @config["s_adds"]
+    @replace     = @config["replace"]
   end
 
   def process_control_fields(record, row)
@@ -49,13 +52,49 @@ class Csv2Mrc
     record
   end
 
+  def process_field_adds(record)
+    field_adds.each do |field_to_add|
+      df = MARC::DataField.new(field_to_add["tag"], field_to_add["ind1"], field_to_add["ind2"])
+      field_to_add["subfields"].each do |subfield|
+        df.append( MARC::Subfield.new(subfield[0], subfield[1]) )
+      end
+      record.append df
+    end
+  end
+
+  def process_replacements(record)
+    replace.each do |replacement_tag, replacement_data|
+      fields = record.fields.find_all { |f| f.tag == replacement_tag }
+      fields.each do |f|
+        replacement_data.each do |code, value|
+          subfield = f.subfields.find { |s| s.code == code }
+          subfield.value = value if subfield
+        end
+      end
+    end     
+  end
+
   def process_row(row)
     record = MARC::Record.new
 
     # values from csv can be injected into 008 so pass it
     process_control_fields record, row
     process_variable_fields record, row
+    process_field_adds record
+    process_subfield_adds record, row
+    process_replacements record, row
     record
+  end
+
+  def process_subfield_adds(record)
+     subfield_adds.each do |subfield_to_add|
+      dfs = record.fields.find_all { |f| f.tag == subfield_to_add["tag"] }
+      dfs.each do |df|
+        subfield_to_add["subfields"].each do |subfield|
+          df.append( MARC::Subfield.new(subfield[0], subfield[1]) )
+        end
+      end
+    end   
   end
 
   def process_variable_fields(record, row)
@@ -152,82 +191,10 @@ _writer  = _xml ? MARC::XMLWriter.new(_output) : MARC::Writer.new(_output)
 
 CSV.foreach(_input, { col_sep: _c_delim, headers: true }) do |csv|
   begin
-    created = {} # use for existing tag lookup
-    record = MARC::Record.new
-
-    # variable fields
-    _spec.each do |s|
-      s.each do |field, spec|
-        f = csv[field]
-        if has_content? f
-          if spec["join"]
-            if created.include? spec["tag"]
-              datafield = record[spec["tag"]]
-              subfield = datafield.find { |s| s.code == spec["sub"] }
-              if subfield
-                subfield.value += "#{spec["prepend"]}#{f}#{spec["append"]}"
-              else
-                f = "#{spec["prepend"]}#{f}".strip
-                f += spec["append"] unless f[-1] == spec["append"]
-                datafield.append( MARC::Subfield.new(spec["sub"], f) )
-              end
-            else
-              f = "#{spec["prepend"]}#{f}".strip
-              f += spec["append"] unless f[-1] == spec["append"]
-              df = MARC::DataField.new(spec["tag"], spec["ind1"], spec["ind2"], [spec["sub"], f])
-              record << df unless record.fields.find { |f| f == df }
-              created[spec["tag"]] = true
-            end
-          else
-            values = f.split(_f_delim)
-            values.each do |value|
-              value = "#{spec["prepend"]}#{value}".strip
-              value += spec["append"] unless value[-1] == spec["append"]
-
-              tag = spec["tag"] # DO NOT MODIFY SPEC
-              _protect.each do |protect_tag, use_tag|
-                if tag == protect_tag and record.fields.find { |f| f.tag == protect_tag }
-                  tag = use_tag
-                end
-              end
-
-              df = MARC::DataField.new(tag, spec["ind1"], spec["ind2"], [spec["sub"], value])
-              record << df unless record.fields.find { |f| f == df }
-            end
-          end
-        end
-      end
-    end
 
     # do the field adds
-    _f_adds.each do |field_to_add|
-      df = MARC::DataField.new(field_to_add["tag"], field_to_add["ind1"], field_to_add["ind2"])
-      field_to_add["subfields"].each do |subfield|
-        df.append( MARC::Subfield.new(subfield[0], subfield[1]) )
-      end
-      record << df
-    end
-
     # do the subfield adds
-    _s_adds.each do |subfield_to_add|
-      dfs = record.fields.find_all { |f| f.tag == subfield_to_add["tag"] }
-      dfs.each do |df|
-        subfield_to_add["subfields"].each do |subfield|
-          df.append( MARC::Subfield.new(subfield[0], subfield[1]) )
-        end
-      end
-    end
-
     # do replacements
-    _replace.each do |replacement_tag, replacement_data|
-      fields = record.fields.find_all { |f| f.tag == replacement_tag }
-      fields.each do |f|
-        replacement_data.each do |code, value|
-          subfield = f.subfields.find { |s| s.code == code }
-          subfield.value = value if subfield
-        end
-      end
-    end 
 
     # fix the title field if there's an author/s
     author = record.fields.find { |f| f.tag == "100" }
