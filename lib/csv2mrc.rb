@@ -21,10 +21,6 @@ class Csv2Mrc
     @spec    = @config["spec"]
   end
 
-  def get_bytes(byte_range)
-    byte_range.split('..').map{ |d| Integer(d) }
-  end
-
   def process_control_fields(record, row)
     fixed_field = ' ' * 40 # start with empty fixed field positions
     leader.each do |where, value|
@@ -107,6 +103,10 @@ class Csv2Mrc
       value = row[value].strip
     end
     value
+  end
+
+  def get_bytes(byte_range)
+    byte_range.split('..').map{ |d| Integer(d) }
   end
 
   def leader_tag?(tag)
