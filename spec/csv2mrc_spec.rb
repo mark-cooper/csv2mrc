@@ -62,6 +62,7 @@ describe "Processing fields from CSV" do
       @c2m.process_variable_fields @record, row
       expect(@record["260"]["b"] ).to eq "Example Inc.,"
       expect(@record["260"]["c"] ).to eq "2014."
+      pp @record
     end
 
   end

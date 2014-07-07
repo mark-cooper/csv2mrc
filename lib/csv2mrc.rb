@@ -8,7 +8,7 @@ class Csv2MrcSpecError < RuntimeError ; end
 
 class Csv2Mrc
 
-  attr_reader :leader, :spec
+  attr_reader :leader, :options, :protect, :spec
 
   def initialize(config, options = {})
     @config = JSON.parse( IO.read(config), symbolize_names: false )
@@ -17,8 +17,9 @@ class Csv2Mrc
       field_delimiter: ",",
     }.merge! options
 
-    @leader = @config["leader"]
-    @spec    = @config["spec"]
+    @leader  = @config["leader"]
+    @spec     = @config["spec"]
+    @protect = @config["protect"]
   end
 
   def process_control_fields(record, row)
@@ -26,7 +27,6 @@ class Csv2Mrc
     leader.each do |where, value|
       tag, byte = where[0..2], where[3..-1] # first three characters are tag, rest are byte positions
       value = check_csv_value(row, value) # if value matches a csv header use the csv value
-    
       if byte_is_range? byte
         bytes = get_bytes byte # array of two elements, position 1 and 2 (i.e. date1, date2)
         size = (bytes[1] - bytes[0]) + 1 # length value should be to be consistent
@@ -65,7 +65,9 @@ class Csv2Mrc
         raise Csv2MrcSpecError, "Invalid spec key #{column} not found in headers" unless row.has_key? column
         field_value = row[column]
         next unless has_content? field_value # nothing to do if empty
+        # create if new, otherwise append
         if rules["join"]
+          # append case
           if fields_created.include? rules["tag"]
             datafield = record[rules["tag"]]
             subfield = datafield.find { |s| s.code == rules["sub"] }
@@ -76,6 +78,7 @@ class Csv2Mrc
               field_value += rules["append"] unless field_value[-1] == rules["append"]
               datafield.append( MARC::Subfield.new(rules["sub"], field_value) )
             end
+          # create
           else
             field_value = "#{rules["prepend"]}#{field_value}".strip
             field_value += rules["append"] unless field_value[-1] == rules["append"]
@@ -83,8 +86,21 @@ class Csv2Mrc
             record << df unless record.fields.find { |f| f == df }
             fields_created[rules["tag"]] = true
           end
+        # create field independently, with possibility of multiple fields
         else
-          # split field_value
+          values = field_value.split(options[:field_delimiter])
+          values.each do |value|
+            value = "#{rules["prepend"]}#{value}".strip
+            value += rules["append"] unless value[-1] == rules["append"]
+            tag = rules["tag"]
+            protect.each do |protect_tag, use_tag|
+              if tag == protect_tag and record.fields.find { |f| f.tag == protect_tag }
+                tag = use_tag
+              end
+            end
+            df = MARC::DataField.new(tag, rules["ind1"], rules["ind2"], [rules["sub"], value])
+            record << df unless record.fields.find { |f| f == df }
+          end
         end
       end
     end
