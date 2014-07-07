@@ -25,6 +25,41 @@ class Csv2Mrc
     @replace     = @config["replace"]
   end
 
+  def process_author_title(record)
+    author = record.fields.find { |f| f.tag == "100" }
+    if author
+      a     = author["a"].to_s
+      a     = "#{a.chop.split(",").reverse.join(" ")}".strip
+      additionals = record.fields.find_all { |f| f.tag == "700" }
+      unless additionals.size > 3
+        additionals.each do |aa|
+          aa  = aa["a"].to_s
+          aa  = "#{aa.chop.split(",").reverse.join(" ")}".strip
+          a   += "; #{aa}"
+        end
+      end
+      a += "."
+      t     = "#{record["245"]["a"].to_s.chop} /"
+      tsa   = record["245"].subfields.find { |f| f.code == "a" }
+      tsa.value = t
+      title = record["245"]
+      tsc   = MARC::Subfield.new('c', "by #{a}")
+      title.append(tsc)
+      # fix indicators
+      title.indicator1 = "1"
+      case title["a"]
+      when /^The / 
+        title.indicator2 = "4"
+      when /^An /
+        title.indicator2 = "3"
+      when /^A /  
+        title.indicator2 = "2"
+      else
+        title.indicator2 = "0"
+      end
+    end    
+  end
+
   def process_control_fields(record, row)
     fixed_field = ' ' * 40 # start with empty fixed field positions
     leader.each do |where, value|
@@ -81,8 +116,11 @@ class Csv2Mrc
     process_control_fields record, row
     process_variable_fields record, row
     process_field_adds record
-    process_subfield_adds record, row
-    process_replacements record, row
+    process_subfield_adds record
+    process_replacements record
+    process_author_title record
+
+    record.fields.sort_by! { |f| f.tag }
     record
   end
 
@@ -174,82 +212,3 @@ class Csv2Mrc
   end
 
 end
-
-__END__
-
-# gather config elements
-_conf    = JSON.parse( IO.read( _conf ) )
-_leader  = _conf["leader"]
-_spec    = _conf["spec"]
-_f_adds  = _conf["f_adds"]
-_s_adds  = _conf["s_adds"]
-_protect = _conf["protect"]
-_replace = _conf["replace"]
-
-# create marc writer 
-_writer  = _xml ? MARC::XMLWriter.new(_output) : MARC::Writer.new(_output)
-
-CSV.foreach(_input, { col_sep: _c_delim, headers: true }) do |csv|
-  begin
-
-    # do the field adds
-    # do the subfield adds
-    # do replacements
-
-    # fix the title field if there's an author/s
-    author = record.fields.find { |f| f.tag == "100" }
-    if author
-      a     = author["a"].to_s
-      a     = "#{a.chop.split(",").reverse.join(" ")}".strip
-      additionals = record.fields.find_all { |f| f.tag == "700" }
-      unless additionals.size > 3
-        additionals.each do |aa|
-          aa  = aa["a"].to_s
-          aa  = "#{aa.chop.split(",").reverse.join(" ")}".strip
-          a   += "; #{aa}"
-        end
-      end
-      a += "."
-      
-      t     = "#{record["245"]["a"].to_s.chop} /"
-      tsa   = record["245"].subfields.find { |f| f.code == "a" }
-      tsa.value = t
-      title = record["245"]
-      tsc   = MARC::Subfield.new('c', "by #{a}")
-      title.append(tsc)
-
-      # fix indicators
-      title.indicator1 = "1"
-      case title["a"]
-      when /^The / 
-        title.indicator2 = "4"
-      when /^An /
-        title.indicator2 = "3"
-      when /^A /  
-        title.indicator2 = "2"
-      else
-        title.indicator2 = "0"
-      end
-    end
-
-    # never allow duplicate 300 fields
-    item_types = record.fields.find_all { |f| f.tag == "300" }
-    record.fields.delete item_types[-1] if item_types.size > 1
-
-    # sort the tags
-    record.fields.sort_by! { |f| f.tag }
-    
-    # write to file
-    _writer.write record
-
-    # finish up
-    puts record if _verbose
-    _count += 1
-  rescue Exception => ex
-    puts "FAILED RECORD\t#{csv}"
-  end
-end
-
-puts "RECORDS PROCESSED\t#{_count.to_s}" if _verbose
-
-__END__

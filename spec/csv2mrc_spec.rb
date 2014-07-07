@@ -79,6 +79,12 @@ describe "Processing fields from CSV" do
       expect(@record["041"]["a"] ).to eq "eng"
     end
 
+    it "protects against duplicate field tags when specified" do
+      @c2m.process_variable_fields @record, @row
+      expect(@record.fields.find_all { |f| f.tag == "100" }.size).to eq 1
+      expect(@record.fields.find_all { |f| f.tag == "700" }.size).to eq 1
+    end
+
   end
 
   context "adding subfields" do
@@ -102,6 +108,29 @@ describe "Processing fields from CSV" do
       expect(@record["260"]["b"] ).to eq "Example Inc.,"
       @c2m.process_replacements @record
       expect(@record["260"]["b"] ).to eq "Override publisher,"
+    end
+
+  end
+
+  context "author is present" do
+
+    it "fixes the author order and updates title indicators" do
+      @c2m.process_variable_fields @record, @row
+      @c2m.process_author_title @record
+      expect(@record["245"].indicator1.to_i ).to eq 1
+    end
+
+  end
+
+  context "processing a row" do
+
+    it "does not raise an error" do
+      expect { @c2m.process_row @row }.not_to raise_error
+    end
+
+    it "returns the assembled marc record" do
+      record = @c2m.process_row @row
+      expect(record.fields.size).to eq 14
     end
 
   end
