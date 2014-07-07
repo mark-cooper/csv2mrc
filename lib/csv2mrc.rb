@@ -10,8 +10,13 @@ class Csv2Mrc
 
   attr_reader :leader, :spec
 
-  def initialize(config)
+  def initialize(config, options = {})
     @config = JSON.parse( IO.read(config), symbolize_names: false )
+
+    @options = {
+      field_delimiter: ",",
+    }.merge! options
+
     @leader = @config["leader"]
     @spec    = @config["spec"]
   end
@@ -62,8 +67,29 @@ class Csv2Mrc
     spec.each do |csv_mapper| # each mapper is a {} with key that should match a row column
       csv_mapper.each do |column, rules|
         raise Csv2MrcSpecError, "Invalid spec key #{column} not found in headers" unless row.has_key? column
-        next unless has_content? row[column] # nothing to do if empty
-        # 
+        field_value = row[column]
+        next unless has_content? field_value # nothing to do if empty
+        if rules["join"]
+          if fields_created.include? rules["tag"]
+            datafield = record[rules["tag"]]
+            subfield = datafield.find { |s| s.code == rules["sub"] }
+            if subfield
+              subfield.value += "#{rules["prepend"]}#{field_value}#{rules["append"]}"
+            else
+              field_value = "#{rules["prepend"]}#{field_value}".strip
+              field_value += rules["append"] unless field_value[-1] == rules["append"]
+              datafield.append( MARC::Subfield.new(rules["sub"], field_value) )
+            end
+          else
+            field_value = "#{rules["prepend"]}#{field_value}".strip
+            field_value += rules["append"] unless field_value[-1] == rules["append"]
+            df = MARC::DataField.new(rules["tag"], rules["ind1"], rules["ind2"], [rules["sub"], field_value])
+            record << df unless record.fields.find { |f| f == df }
+            fields_created[rules["tag"]] = true
+          end
+        else
+          # split field_value
+        end
       end
     end
     record
@@ -112,35 +138,6 @@ CSV.foreach(_input, { col_sep: _c_delim, headers: true }) do |csv|
   begin
     created = {} # use for existing tag lookup
     record = MARC::Record.new
-
-    # leader and control fields
-    ff = ' ' * 40
-    _leader.each do |where, value|
-      tag   = where[0..2]
-      byte  = where[3..-1]
-      if csv.has_key? value
-        value = csv[value]
-        next unless has_content? value
-        value = value.strip
-      end
-      if byte =~ /../
-        bytes = byte.split('..').map{ |d| Integer(d) }
-        size = (bytes[1] - bytes[0]) + 1
-        next unless value.size == size # must match length
-        if tag == "000"
-          record.leader[bytes[0]..bytes[1]] = value
-        else
-          ff[ bytes[0]..bytes[1] ] = value
-        end
-      else 
-        if tag == "000"
-          record.leader[byte.to_i] = value
-        else
-          ff[byte.to_i] = value
-        end
-      end
-    end
-    record.append( MARC::ControlField.new("008", ff) )
 
     # variable fields
     _spec.each do |s|

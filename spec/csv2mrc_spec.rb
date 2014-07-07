@@ -21,34 +21,49 @@ describe "Initializing Csv2Mrc" do
 
 end
 
-describe "Processing control fields from CSV" do
+describe "Processing fields from CSV" do
 
   before :each do
-    @c2m    = Csv2Mrc.new("spec/example.json")
+    @c2m    = Csv2Mrc.new("spec/example.json", field_delimiter: ";")
     @csv      = CSV.new( IO.read("spec/example.tsv"), headers: true, col_sep: "\t" )
     @record = MARC::Record.new
   end
 
-  it "fails if the leader uses an empty value" do
-    row  = @csv.shift
-    row["year"] = ""
-    expect{ @c2m.process_control_fields(@record, row) }.to raise_error( Csv2MrcLeaderValueError )
+  context "control fields" do
+
+    it "fails if the leader uses an empty value" do
+      row  = @csv.shift
+      row["year"] = ""
+      expect{ @c2m.process_row(row) }.to raise_error( Csv2MrcLeaderValueError )
+    end
+
+    it "fails if the value is incorrect length for byte range" do
+      row  = @csv.shift
+      row["year"] = "20"
+      expect{ @c2m.process_control_fields(@record, row) }.to raise_error( Csv2MrcLeaderByteLengthError )
+    end
+
+    it "creates the leader correctly" do
+      row  = @csv.shift
+      @c2m.process_control_fields @record, row
+      expect(@record.leader[5]).to eq "n"
+      expect(@record.leader[6]).to eq "m"
+      expect(@record.leader[7]).to eq "a"
+      expect(@record["008"].value[7..10]).to eq "2014"
+      expect(@record["008"].value[35..37]).to eq "eng"
+    end
+
   end
 
-  it "fails if the value is incorrect length for byte range" do
-    row  = @csv.shift
-    row["year"] = "20"
-    expect{ @c2m.process_control_fields(@record, row) }.to raise_error( Csv2MrcLeaderByteLengthError )
-  end
+  context "variable fields" do
 
-  it "creates the leader correctly" do
-    row  = @csv.shift
-    @c2m.process_control_fields @record, row
-    expect(@record.leader[5]).to eq "n"
-    expect(@record.leader[6]).to eq "m"
-    expect(@record.leader[7]).to eq "a"
-    expect(@record["008"].value[7..10]).to eq "2014"
-    expect(@record["008"].value[35..37]).to eq "eng"
+    it "joins fields if join specified" do
+      row = @csv.shift
+      @c2m.process_variable_fields @record, row
+      expect(@record["260"]["b"] ).to eq "Example Inc.,"
+      expect(@record["260"]["c"] ).to eq "2014."
+    end
+
   end
 
 end
